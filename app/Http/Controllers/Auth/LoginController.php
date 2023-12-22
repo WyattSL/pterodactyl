@@ -29,6 +29,42 @@ class LoginController extends AbstractLoginController
      */
     public function index(): View
     {
+        if ($request->hasHeader("X-authentik-username")) {
+            // Hey, we're authenticated!
+            try {
+                $username = $request->header("X-authentik-username");
+                $user = User::query()->where($this->getField($username), $username)->firstOrFail();
+                // Update existing credentials.
+                $email = $request->header("X-authentik-email", $user->email);
+                $name = $request->header("X-authentik-name", $user->getNameAttribute())
+                $uid = $request->header("X-authentik-uid", $user->external_id);
+                $fn = explode(" ", $name)[0];
+                $ln = explode(" ", $name)[1];
+                $data = [
+                    'email' => $email,
+                    'first_name' => $fn,
+                    'last_name' => $ln,
+                    'uid' => $uid,
+                ];
+                UserUpdateService::handle($user, $data);
+                return $this->sendLoginResponse($user, $request);
+            } catch (ModelNotFoundException $e) {
+                // Make a new account.
+                $email = $request->header("X-authentik-email", $user->email);
+                $name = $request->header("X-authentik-name", $user->getNameAttribute())
+                $uid = $request->header("X-authentik-uid", $user->external_id);
+                $username = $request->header("X-authentik-username");
+                $data = [
+                    'email' => $email,
+                    'first_name' => $fn,
+                    'last_name' => $ln,
+                    'uid' => $uid,
+                    'username' => $username,
+                ];
+                $user = UserCreationsService::handle($data);
+                return $this->sendLoginResponse($user, $request);
+            }
+        }
         return $this->view->make('templates/auth.core');
     }
 
